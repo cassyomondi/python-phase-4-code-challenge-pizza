@@ -62,12 +62,23 @@ class RestaurantPizzas(Resource):
     def post(self):
         data = request.get_json()
 
+        # if no payload
         if not data:
             return {"errors": ["validation errors"]}, 400
 
         price = data.get("price")
         pizza_id = data.get("pizza_id")
         restaurant_id = data.get("restaurant_id")
+
+        # required fields check
+        if price is None or pizza_id is None or restaurant_id is None:
+            return {"errors": ["validation errors"]}, 400
+
+        # ensure referenced pizza and restaurant exist
+        pizza = Pizza.query.get(pizza_id)
+        restaurant = Restaurant.query.get(restaurant_id)
+        if not pizza or not restaurant:
+            return {"errors": ["validation errors"]}, 400
 
         try:
             new_rp = RestaurantPizza(
@@ -78,16 +89,21 @@ class RestaurantPizzas(Resource):
             db.session.add(new_rp)
             db.session.commit()
 
-        except (ValueError, IntegrityError):
+        except ValueError:
+            # Model validation (validate_price) raised ValueError
             db.session.rollback()
-            return {"errors": ["validation errors"]}, 400   # <- changed here
+            return {"errors": ["validation errors"]}, 400
+
+        except IntegrityError:
+            db.session.rollback()
+            return {"errors": ["validation errors"]}, 400
 
         return new_rp.to_dict(
             only=("id", "price", "pizza_id", "restaurant_id", "pizza", "restaurant"),
-            rules={
-                "-pizza.restaurant_pizzas": ...,
-                "-restaurant.restaurant_pizzas": ...
-            }
+            rules=(
+                "-pizza.restaurant_pizzas",
+                "-restaurant.restaurant_pizzas"
+            )
         ), 201
 
 
